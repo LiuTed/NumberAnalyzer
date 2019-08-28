@@ -28,11 +28,11 @@ static ret* getret()
 
 static void N_iter(double v, void* priv)
 {
-    *(int*)priv++;
+    (*(int*)priv)++;
 }
 static double N_res(void* priv)
 {
-    return *(int*)priv;
+    return (double)*(int*)priv;
 }
 ret* N()
 {

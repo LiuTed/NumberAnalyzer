@@ -15,7 +15,7 @@ const char *usage = "Usage: analyzer [-hdDasv] [-f SOURCE] [-m METHOD[,METHOD[..
 "\t-f: specify source of input, use \'-\' to read from stdin\n"
 "\t-s: soft mode, ignore unavailable method, must appear before -m\n"
 "\t-v: show title, vv to print detailed log\n"
-"\t-m: enable methods in the method list, duplicated method will be ignored.\n"
+"\t-m: enable methods in the method list, duplicated method will NOT be ignored.\n"
 "\t\tMethod will be searched in default list and extern.so by default.\n"
 "\t\tOr use LIB:METHOD to specify the library to search"
 ;
@@ -83,7 +83,7 @@ void __attribute__((constructor)) startCallback()
     dlHandle[nDlOpen++] = dlopen("analyzer.so", RTLD_NOW | RTLD_LOCAL);
     if(!dlHandle[0])
     {
-        logError("Cannot open analyzer.so: %s(%d)", strerror(errno), errno);
+        logError("%s", dlerror());
     }
 }
 
@@ -133,10 +133,14 @@ int openDl(char* name)
         logError("Too many opened library (>=128)");
         return 1;
     }
+    if(dlopen(name, RTLD_LAZY | RTLD_NOLOAD))
+    {
+        return 0;
+    }
     void *handle = dlopen(name, RTLD_LAZY | RTLD_LOCAL);
     if(!handle)
     {
-        logError("Cannot open lib %s: %s(%d)", name, strerror(errno), errno);
+        logError("%s", dlerror());
         return 2;
     }
     log("extra dl: %d %s %p", nDlOpen, name, handle);
@@ -149,7 +153,7 @@ int findCallback(char* name)
     int i = 0;
     for(; i < nDlOpen; i++)
     {
-        genFunc_t func = dlsym(dlHandle[i], "name");
+        genFunc_t func = dlsym(dlHandle[i], name);
         if(func)
         {
             log("func %s found in %d", name, i);
@@ -229,9 +233,9 @@ int main(int argc, char **argv)
                 break;
             case 'm':
             {
-                char *tmp = strstr(optarg, ",");
                 do
                 {
+                    char *tmp = strstr(optarg, ",");
                     char *sep;
                     if(tmp)
                     {
@@ -257,7 +261,7 @@ int main(int argc, char **argv)
                 break;
             }
             default:
-                log("unknown argument, stop parsing");
+                logError("unknown argument, stop parsing");
                 goto _out;
         }
     }
@@ -289,12 +293,15 @@ _out:
         if(ptr->val->final)
             ptr->val->final(ptr->val->priv);
     }
-    for(ptr = head; ptr; ptr = ptr->next)
+    if(verbose)
     {
-        if(verbose)
-            printf("%11s ", ptr->name);
+        for(ptr = head; ptr; ptr = ptr->next)
+        {
+            if(verbose)
+                printf("%11s ", ptr->name);
+        }
+        putc('\n', stdout);
     }
-    putc('\n', stdout);
     for(ptr = head; ptr; ptr = ptr->next)
     {
         printf("%11.5lf ", ptr->val->getResult(ptr->val->priv));
