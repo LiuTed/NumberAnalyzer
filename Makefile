@@ -1,4 +1,4 @@
-CC ?= gcc
+CC := gcc
 CFLAG := -O2
 
 .PHONY: all clean
@@ -8,7 +8,7 @@ analyzer: main.c analyzer.h
 	$(CC) main.c -o analyzer -ldl $(CFLAG) -Wl,-rpath=.
 
 analyzer.so: default.c analyzer.h
-	$(CC) default.c -fPIC -shared -o analyzer.so
+	$(CC) default.c -fPIC -shared -o analyzer.so -lm
 
 clean:
 	-rm analyzer analyzer.so

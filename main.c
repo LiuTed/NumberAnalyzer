@@ -16,7 +16,7 @@ const char *usage = "Usage: analyzer [-hdDasv] [-f SOURCE] [-m METHOD[,METHOD[..
 "\t-s: soft mode, ignore unavailable method, must appear before -m\n"
 "\t-v: show title, vv to print detailed log\n"
 "\t-m: enable methods in the method list, duplicated method will NOT be ignored.\n"
-"\t\tMethod will be searched in default list and extern.so by default.\n"
+"\t\tMethod will be searched in default list and other LIBs loaded before by default.\n"
 "\t\tOr use LIB:METHOD to specify the library to search"
 ;
 
@@ -122,6 +122,7 @@ int enableDefaultList()
         }
         log("%s read successfully", *ptr);
         registerCallback(*ptr, func());
+        ptr++;
     }
     return 0;
 }
@@ -151,14 +152,32 @@ int openDl(char* name)
 int findCallback(char* name)
 {
     int i = 0;
-    for(; i < nDlOpen; i++)
+    char *sep = strstr(name, ":");
+    if(sep)
     {
-        genFunc_t func = dlsym(dlHandle[i], name);
+        *sep = '\0';
+        if(openDl(name)) return 2;
+        void *handle = dlopen(name, RTLD_NOLOAD);
+        genFunc_t func = dlsym(handle, sep+1);
+        *sep = ':';
         if(func)
         {
-            log("func %s found in %d", name, i);
-            registerCallback(name, func());
+            log("func %s found", name);
+            registerCallback(sep+1, func());
             return 0;
+        }
+    }
+    else
+    {
+        for(; i < nDlOpen; i++)
+        {
+            genFunc_t func = dlsym(dlHandle[i], name);
+            if(func)
+            {
+                log("func %s found in %d", name, i);
+                registerCallback(name, func());
+                return 0;
+            }
         }
     }
     logError("Cannot find symbol %s", name);
@@ -197,7 +216,7 @@ int main(int argc, char **argv)
                 showDefaultList();
                 exit(0);
             case 'd':
-                if(!soft && enableDefaultList())
+                if(enableDefaultList() && !soft)
                 {
                     exit(2);
                 }
@@ -236,23 +255,12 @@ int main(int argc, char **argv)
                 do
                 {
                     char *tmp = strstr(optarg, ",");
-                    char *sep;
                     if(tmp)
                     {
                         *tmp = '\0';
                         tmp++;
                     }
-                    sep = strstr(optarg, ":");
-                    if(sep)
-                    {
-                        *sep = '\0';
-                        if(!soft && openDl(optarg))
-                        {
-                            exit(5);
-                        }
-                        optarg = sep+1;
-                    }
-                    if(!soft && findCallback(optarg))
+                    if(findCallback(optarg) && !soft)
                     {
                         exit(6);
                     }
@@ -281,10 +289,14 @@ _out:
             if(optind >= argc) break;
             strcpy(arg, argv[optind++]);
         }
-        sscanf(arg, "%lf", &darg);
+        if(sscanf(arg, "%lf", &darg) != 1)
+        {
+            logError("Ignoring illegal input: %s", arg);
+            continue;
+        }
         for(ptr = head; ptr; ptr = ptr->next)
         {
-            if(ptr->val->iterative);
+            if(ptr->val->iterative)
                 ptr->val->iterative(darg, ptr->val->priv);
         }
     }

@@ -6,6 +6,7 @@ struct callback
     void (*iterative)(double v, void *priv);
     void (*final)(void *priv);
     double (*getResult)(void *priv);
+    void (*destruct)();
     void *priv;
 };
 
